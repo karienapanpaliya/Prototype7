@@ -463,7 +463,9 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: daeffc0083a274393acb2fe95199b03c, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::PlayerMovement
-  speed: 5
+  horizontalSpeed: 5
+  verticalControlSpeed: 2.5
+  baseUpwardSpeed: 2
 --- !u!58 &1908542072
 CircleCollider2D:
   m_ObjectHideFlags: 0
