@@ -6,16 +6,44 @@ public class PlayerMove : MonoBehaviour
     [Header("Movement")]
     public float horizontalSpeed = 5f;
     public float verticalControlSpeed = 2.5f;
-    public float baseUpwardSpeed = 2f;
+    public float baseUpwardSpeed = 0.5f;
 
     private Rigidbody2D rb;
     private Vector2 moveInput;
     private bool isDead;
+    private InputAction moveAction;
 
     void Awake()
     {
         // Cache Rigidbody2D for physics movement.
         rb = GetComponent<Rigidbody2D>();
+
+        moveAction = new InputAction("Move", InputActionType.Value);
+
+        moveAction.AddCompositeBinding("2DVector")
+            .With("Up", "<Keyboard>/w")
+            .With("Down", "<Keyboard>/s")
+            .With("Left", "<Keyboard>/a")
+            .With("Right", "<Keyboard>/d");
+
+        moveAction.AddCompositeBinding("2DVector")
+            .With("Up", "<Keyboard>/upArrow")
+            .With("Down", "<Keyboard>/downArrow")
+            .With("Left", "<Keyboard>/leftArrow")
+            .With("Right", "<Keyboard>/rightArrow");
+
+        // Deadzone helps avoid stick drift interfering with keyboard input.
+        moveAction.AddBinding("<Gamepad>/leftStick").WithProcessor("stickDeadzone(min=0.2,max=0.95)");
+        moveAction.Enable();
+    }
+
+    void OnDestroy()
+    {
+        if (moveAction != null)
+        {
+            moveAction.Disable();
+            moveAction.Dispose();
+        }
     }
 
     public void SetDead()
@@ -36,26 +64,8 @@ public class PlayerMove : MonoBehaviour
             return;
         }
 
-        // Read movement from keyboard (WASD/Arrows) and gamepad left stick.
-        Vector2 keyboardInput = Vector2.zero;
-        var keyboard = Keyboard.current;
-        if (keyboard != null)
-        {
-            if (keyboard.aKey.isPressed || keyboard.leftArrowKey.isPressed) keyboardInput.x -= 1f;
-            if (keyboard.dKey.isPressed || keyboard.rightArrowKey.isPressed) keyboardInput.x += 1f;
-            if (keyboard.sKey.isPressed || keyboard.downArrowKey.isPressed) keyboardInput.y -= 1f;
-            if (keyboard.wKey.isPressed || keyboard.upArrowKey.isPressed) keyboardInput.y += 1f;
-        }
-
-        Vector2 gamepadInput = Vector2.zero;
-        var gamepad = Gamepad.current;
-        if (gamepad != null)
-        {
-            gamepadInput = gamepad.leftStick.ReadValue();
-        }
-
-        // Combine and clamp player steering input.
-        moveInput = Vector2.ClampMagnitude(keyboardInput + gamepadInput, 1f);
+        Vector2 input = moveAction != null ? moveAction.ReadValue<Vector2>() : Vector2.zero;
+        moveInput = Vector2.ClampMagnitude(input, 1f);
     }
 
     void FixedUpdate()
