@@ -273,6 +273,12 @@ MonoBehaviour:
   yOffset: 2
   smoothTime: 0.2
   onlyMoveUp: 1
+  enableDangerZoom: 1
+  maxZoomIn: 0.9
+  zoomSmoothTime: 0.12
+  minPulseSpeed: 0.8
+  maxPulseSpeed: 4.5
+  maxPulseAmplitude: 0.2
 --- !u!1 &619394800
 GameObject:
   m_ObjectHideFlags: 0
@@ -910,16 +916,31 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: b6cf5416fbbd54dc4a39348a66667c2b, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::PlayerCorruption
-  maxBlackTime: 2.5
-  maxWhiteTime: 2.5
-  recoveryPerSecond: 1
+  safeDuration: 4
+  deathDuration: 10
   playerRenderer: {fileID: 0}
   baseColor: {r: 0.5, g: 0.5, b: 0.5, a: 1}
-  flickerSpeed: 12
+  minFlickerSpeed: 2
+  maxFlickerSpeed: 14
   maxScalePulse: 0.2
-  pulseSpeed: 10
+  minPulseSpeed: 2
+  maxPulseSpeed: 11
+  autoCreateFeedbackHUD: 1
+  leakParticles: {fileID: 0}
+  auraRenderer: {fileID: 0}
+  minLeakRate: 2
+  maxLeakRate: 16
+  minLeakSpeed: 0.12
+  maxLeakSpeed: 0.8
+  minLeakSize: 0.05
+  maxLeakSize: 0.16
+  leakLifetime: 0.55
+  minAuraScale: 1.2
+  maxAuraScale: 2.4
+  maxAuraAlpha: 0.3
   destroyOnDeath: 1
   destroyDelay: 0.15
+  enableDebugLogs: 1
 --- !u!1660057539 &9223372036854775807
 SceneRoots:
   m_ObjectHideFlags: 0

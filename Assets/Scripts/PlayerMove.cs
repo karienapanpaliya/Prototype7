@@ -18,6 +18,13 @@ public class PlayerMove : MonoBehaviour
         // Cache Rigidbody2D for physics movement.
         rb = GetComponent<Rigidbody2D>();
 
+        // Interpolate so LateUpdate camera reads a smoothed position between physics steps,
+        // preventing the camera shake caused by mismatched FixedUpdate / render framerates.
+        if (rb != null)
+        {
+            rb.interpolation = RigidbodyInterpolation2D.Interpolate;
+        }
+
         moveAction = new InputAction("Move", InputActionType.Value);
 
         moveAction.AddCompositeBinding("2DVector")
