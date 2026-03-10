@@ -4,25 +4,34 @@ using UnityEngine;
 public class PlayerCorruption : MonoBehaviour
 {
     [Header("Corruption Timers")]
-    public float maxBlackTime = 2.5f;
-    public float maxWhiteTime = 2.5f;
-    public float recoveryPerSecond = 1f;
+    public float safeTimeAfterSwitch = 2.5f;
+    public float maxBlackTime = 7.5f;
+    public float maxWhiteTime = 7.5f;
 
     [Header("Visual Feedback")]
     public SpriteRenderer playerRenderer;
     public Color baseColor = new Color(0.5f, 0.5f, 0.5f);
-    public float flickerSpeed = 12f;
+    public float minFlickerSpeed = 2f;
+    public float maxFlickerSpeed = 14f;
     public float maxScalePulse = 0.2f;
-    public float pulseSpeed = 10f;
+    public float minPulseSpeed = 2f;
+    public float maxPulseSpeed = 11f;
 
     [Header("Death")]
     public bool destroyOnDeath = true;
     public float destroyDelay = 0.15f;
 
+    private enum ActiveZone
+    {
+        None,
+        Black,
+        White
+    }
+
     private int blackContacts;
     private int whiteContacts;
-    private float blackTimer;
-    private float whiteTimer;
+    private ActiveZone activeZone;
+    private float zoneTimer;
     private bool isDead;
 
     private PlayerMove playerMove;
@@ -42,6 +51,9 @@ public class PlayerCorruption : MonoBehaviour
         {
             playerRenderer.color = baseColor;
         }
+
+        activeZone = ActiveZone.None;
+        zoneTimer = 0f;
     }
 
     void Update()
@@ -51,33 +63,37 @@ public class PlayerCorruption : MonoBehaviour
             return;
         }
 
-        float dt = Time.deltaTime;
+        ActiveZone nextZone = ResolveActiveZone();
+        if (nextZone != activeZone)
+        {
+            // Only reset danger when player truly swaps to the opposite zone.
+            if ((activeZone == ActiveZone.Black && nextZone == ActiveZone.White) ||
+                (activeZone == ActiveZone.White && nextZone == ActiveZone.Black))
+            {
+                zoneTimer = 0f;
+            }
 
-        if (blackContacts > 0)
-        {
-            blackTimer += dt;
-        }
-        else
-        {
-            blackTimer = Mathf.Max(0f, blackTimer - recoveryPerSecond * dt);
-        }
-
-        if (whiteContacts > 0)
-        {
-            whiteTimer += dt;
-        }
-        else
-        {
-            whiteTimer = Mathf.Max(0f, whiteTimer - recoveryPerSecond * dt);
+            activeZone = nextZone;
         }
 
-        float blackDanger = maxBlackTime > 0f ? Mathf.Clamp01(blackTimer / maxBlackTime) : 0f;
-        float whiteDanger = maxWhiteTime > 0f ? Mathf.Clamp01(whiteTimer / maxWhiteTime) : 0f;
-        float danger = Mathf.Max(blackDanger, whiteDanger);
+        if (activeZone == ActiveZone.None)
+        {
+            ResetVisuals();
+            return;
+        }
 
-        UpdateVisualFeedback(danger, blackDanger, whiteDanger);
+        zoneTimer += Time.deltaTime;
 
-        if (blackTimer >= maxBlackTime || whiteTimer >= maxWhiteTime)
+        float zoneLimit = activeZone == ActiveZone.Black ? maxBlackTime : maxWhiteTime;
+        float danger = 0f;
+        if (zoneLimit > safeTimeAfterSwitch)
+        {
+            danger = Mathf.Clamp01((zoneTimer - safeTimeAfterSwitch) / (zoneLimit - safeTimeAfterSwitch));
+        }
+
+        UpdateVisualFeedback(danger, activeZone);
+
+        if (zoneTimer >= zoneLimit)
         {
             Die();
         }
@@ -119,29 +135,59 @@ public class PlayerCorruption : MonoBehaviour
         }
     }
 
-    private void UpdateVisualFeedback(float danger, float blackDanger, float whiteDanger)
+    private ActiveZone ResolveActiveZone()
     {
-        float inDanger = (blackContacts > 0 || whiteContacts > 0) ? 1f : 0f;
+        if (blackContacts > 0 && whiteContacts == 0)
+        {
+            return ActiveZone.Black;
+        }
+
+        if (whiteContacts > 0 && blackContacts == 0)
+        {
+            return ActiveZone.White;
+        }
+
+        return ActiveZone.None;
+    }
+
+    private void ResetVisuals()
+    {
+        if (playerRenderer != null)
+        {
+            playerRenderer.color = baseColor;
+        }
+
+        transform.localScale = baseScale;
+    }
+
+    private void UpdateVisualFeedback(float danger, ActiveZone zone)
+    {
+        if (danger <= 0f)
+        {
+            ResetVisuals();
+            return;
+        }
 
         if (playerRenderer != null)
         {
-            Color targetColor = baseColor;
-            if (blackDanger >= whiteDanger && blackContacts > 0)
-            {
-                targetColor = Color.black;
-            }
-            else if (whiteContacts > 0)
-            {
-                targetColor = Color.white;
-            }
+            Color targetColor = zone == ActiveZone.Black ? Color.black : Color.white;
+
+            float flickerSpeed = Mathf.Lerp(minFlickerSpeed, maxFlickerSpeed, danger);
+            float pulseSpeed = Mathf.Lerp(minPulseSpeed, maxPulseSpeed, danger);
 
             float flicker = (Mathf.Sin(Time.time * flickerSpeed) + 1f) * 0.5f;
-            float blend = flicker * danger * inDanger;
+            float blend = flicker * danger;
             playerRenderer.color = Color.Lerp(baseColor, targetColor, blend);
+
+            float pulse = Mathf.Sin(Time.time * pulseSpeed) * maxScalePulse * danger;
+            transform.localScale = baseScale * (1f + pulse);
+            return;
         }
 
-        float pulse = Mathf.Sin(Time.time * pulseSpeed) * maxScalePulse * danger * inDanger;
-        transform.localScale = baseScale * (1f + pulse);
+        // Keep pulsing even if renderer reference is missing.
+        float fallbackPulseSpeed = Mathf.Lerp(minPulseSpeed, maxPulseSpeed, danger);
+        float fallbackPulse = Mathf.Sin(Time.time * fallbackPulseSpeed) * maxScalePulse * danger;
+        transform.localScale = baseScale * (1f + fallbackPulse);
     }
 
     private void Die()
