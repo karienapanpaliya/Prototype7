@@ -37,7 +37,7 @@ public class PlayerCorruption : MonoBehaviour
     [Header("Debug")]
     public bool enableDebugLogs = true;
 
-    private enum ActiveZone
+    protected enum ActiveZone
     {
         None,
         Black,
@@ -244,7 +244,7 @@ public class PlayerCorruption : MonoBehaviour
             ", resolved zone: " + ResolveActiveZone() + ", timer: " + zoneTimer.ToString("F2"));
     }
 
-    private ActiveZone ResolveActiveZone()
+    protected virtual ActiveZone ResolveActiveZone()
     {
         if (blackContacts > 0 && whiteContacts == 0)
         {

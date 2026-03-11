@@ -919,7 +919,6 @@ MonoBehaviour:
   safeDuration: 4
   deathDuration: 10
   playerRenderer: {fileID: 0}
-  baseColor: {r: 0.5, g: 0.5, b: 0.5, a: 1}
   minFlickerSpeed: 2
   maxFlickerSpeed: 14
   maxScalePulse: 0.2
