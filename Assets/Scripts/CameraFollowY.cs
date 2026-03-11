@@ -4,7 +4,9 @@ public class CameraFollowY : MonoBehaviour
 {
     public Transform target;
     public float yOffset = 2f;
-    public float smoothTime = 0.2f;
+    public float smoothTime = 0.08f;
+    public float fastCatchupSmoothTime = 0.01f;
+    public float catchupDistance = 0.5f;
     public bool onlyMoveUp = true;
 
     [Header("Danger Zoom")]
@@ -103,7 +105,12 @@ public class CameraFollowY : MonoBehaviour
             targetY = Mathf.Max(current.y, targetY);
         }
 
-        float smoothedY = Mathf.SmoothDamp(current.y, targetY, ref yVelocity, smoothTime);
+        float yDelta = Mathf.Abs(targetY - current.y);
+        float activeSmoothTime = yDelta > catchupDistance
+            ? fastCatchupSmoothTime
+            : smoothTime;
+
+        float smoothedY = Mathf.SmoothDamp(current.y, targetY, ref yVelocity, activeSmoothTime);
         transform.position = new Vector3(current.x, smoothedY, current.z);
 
         UpdateDangerZoom();

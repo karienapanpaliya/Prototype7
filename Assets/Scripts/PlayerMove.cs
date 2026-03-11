@@ -4,13 +4,14 @@ using UnityEngine.InputSystem;
 public class PlayerMove : MonoBehaviour
 {
     [Header("Movement")]
-    public float horizontalSpeed = 5f;
-    public float verticalControlSpeed = 2.5f;
-    public float baseUpwardSpeed = 0.5f;
+    public float horizontalSpeed = 35f;
+    public float verticalControlSpeed = 28f;
+    public float baseUpwardSpeed = 2f;
 
     private Rigidbody2D rb;
     private Vector2 moveInput;
     private bool isDead;
+    private bool isPaused;
     private InputAction moveAction;
 
     void Awake()
@@ -63,6 +64,19 @@ public class PlayerMove : MonoBehaviour
         }
     }
 
+    public void SetPaused(bool state)
+    {
+        isPaused = state;
+        if (isPaused)
+        {
+            moveInput = Vector2.zero;
+            if (rb != null)
+            {
+                rb.linearVelocity = Vector2.zero;
+            }
+        }
+    }
+
     void Update()
     {
         if (isDead)
@@ -72,6 +86,21 @@ public class PlayerMove : MonoBehaviour
         }
 
         Vector2 input = moveAction != null ? moveAction.ReadValue<Vector2>() : Vector2.zero;
+        
+        if (isPaused)
+        {
+            // When paused, only allow vertical input to resume movement
+            if (input.y > 0f)
+            {
+                isPaused = false;
+            }
+            else
+            {
+                moveInput = Vector2.zero;
+                return;
+            }
+        }
+        
         moveInput = Vector2.ClampMagnitude(input, 1f);
     }
 
@@ -91,8 +120,11 @@ public class PlayerMove : MonoBehaviour
         float velocityX = moveInput.x * horizontalSpeed;
         float velocityY = baseUpwardSpeed + (moveInput.y * verticalControlSpeed);
 
-        // Keep upward progression so the run always advances.
-        velocityY = Mathf.Max(0.25f, velocityY);
+        if (isPaused)
+        {
+            velocityX = 0f;
+            velocityY = 0f;
+        }
 
         rb.linearVelocity = new Vector2(velocityX, velocityY);
     }

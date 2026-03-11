@@ -6,14 +6,14 @@ public class CorruptionFeedbackHUD : MonoBehaviour
     [SerializeField] private PlayerCorruption target;
 
     [Header("Vignette")]
-    [SerializeField] private int vignetteLayers = 11;
-    [SerializeField] private float minVignetteDepth = 36f;
-    [SerializeField] private float maxVignetteDepth = 185f;
-    [SerializeField] private float minVignetteAlpha = 0.06f;
-    [SerializeField] private float maxVignetteAlpha = 0.34f;
-    [SerializeField] private float grainAmount = 0.2f;
-    [SerializeField] private float grainSpeed = 14f;
-    [SerializeField] private bool blackZoneOnLeftSide = true;
+    [SerializeField] private int vignetteLayers = 14;
+    [SerializeField] private float minVignetteDepth = 44f;
+    [SerializeField] private float maxVignetteDepth = 100f;
+    [SerializeField] private float minVignetteAlpha = 0.015f;
+    [SerializeField] private float maxVignetteAlpha = 0.14f;
+    [SerializeField] private float grainAmount = 0.08f;
+    [SerializeField] private float grainSpeed = 8f;
+    [SerializeField] private Color vignetteColor = new Color(0.42f, 0.04f, 0.04f, 1f);
 
     private static Texture2D whiteTexture;
     private static Sprite auraSprite;
@@ -69,10 +69,9 @@ public class CorruptionFeedbackHUD : MonoBehaviour
             return;
         }
 
-        Color zoneColor = GetZoneColor(target.IsBlackZoneActive);
-        Rect sideRect = GetActiveSideRect(target.IsBlackZoneActive);
+        Rect fullScreenRect = new Rect(0f, 0f, Screen.width, Screen.height);
 
-        DrawVignette(zoneColor, danger, sideRect);
+        DrawVignette(vignetteColor, danger, fullScreenRect);
     }
 
     public static Sprite GetOrCreateAuraSprite()
@@ -116,14 +115,14 @@ public class CorruptionFeedbackHUD : MonoBehaviour
         intensity = Mathf.Clamp01(intensity);
         int layers = Mathf.Max(1, vignetteLayers);
         float depth = Mathf.Lerp(minVignetteDepth, maxVignetteDepth, intensity);
-        float pulse = 0.92f + ((Mathf.Sin(Time.time * Mathf.Lerp(1.5f, 6f, intensity)) + 1f) * 0.04f);
+        float pulse = 0.96f + ((Mathf.Sin(Time.time * Mathf.Lerp(1.2f, 3.8f, intensity)) + 1f) * 0.02f);
         float totalAlpha = Mathf.Lerp(minVignetteAlpha, maxVignetteAlpha, intensity) * pulse;
 
         for (int index = 0; index < layers; index++)
         {
             float t = (index + 1f) / layers;
-            float layerInset = depth * (1f - Mathf.Pow(t, 1.75f));
-            float layerAlpha = totalAlpha * (1f - t) * 0.8f;
+            float layerInset = depth * (1f - Mathf.Pow(t, 2.1f));
+            float layerAlpha = totalAlpha * Mathf.Pow(1f - t, 1.45f) * 0.72f;
 
             // Add subtle moving noise so the vignette feels grainy and unstable.
             float grainSample = Mathf.PerlinNoise((index * 0.37f) + (Time.time * grainSpeed), Time.time * (grainSpeed * 0.71f));
@@ -140,29 +139,12 @@ public class CorruptionFeedbackHUD : MonoBehaviour
         }
     }
 
-    private Rect GetActiveSideRect(bool isBlackZone)
-    {
-        float halfWidth = Screen.width * 0.5f;
-        bool drawLeftSide = isBlackZone ? blackZoneOnLeftSide : !blackZoneOnLeftSide;
-        return drawLeftSide
-            ? new Rect(0f, 0f, halfWidth, Screen.height)
-            : new Rect(halfWidth, 0f, halfWidth, Screen.height);
-    }
-
     private static void DrawRect(Rect rect, Color color)
     {
         Color previousColor = GUI.color;
         GUI.color = color;
         GUI.DrawTexture(rect, whiteTexture);
         GUI.color = previousColor;
-    }
-
-    private static Color GetZoneColor(bool isBlackZone)
-    {
-        // Invert vignette color for stronger contrast with the active zone.
-        return isBlackZone
-            ? new Color(0.96f, 0.96f, 0.96f, 1f)
-            : new Color(0.04f, 0.04f, 0.05f, 1f);
     }
 
     private static void DrawBorder(float inset, Color color, Rect area)

@@ -1,16 +1,20 @@
+using System.Collections;
+using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.InputSystem;
+using UnityEngine.SceneManagement;
 
 [RequireComponent(typeof(PlayerMove))]
 public class PlayerCorruption : MonoBehaviour
 {
     [Header("Corruption Timers")]
-    public float safeDuration = 4f;
-    public float deathDuration = 10f;
+    public float safeDuration = 3f;
+    public float deathDuration = 8f;
 
     [Header("Visual Feedback")]
     public SpriteRenderer playerRenderer;
-    public float minFlickerSpeed = 2f;
-    public float maxFlickerSpeed = 14f;
+    public float minFlickerSpeed = 0.8f;
+    public float maxFlickerSpeed = 18f;
     public float maxScalePulse = 0.2f;
     public float minPulseSpeed = 2f;
     public float maxPulseSpeed = 11f;
@@ -30,9 +34,24 @@ public class PlayerCorruption : MonoBehaviour
     public float maxAuraScale = 2.4f;
     public float maxAuraAlpha = 0.3f;
 
+    [Header("Audio")]
+    public AudioSource heartbeatSource;
+    public AudioClip heartbeatClip;
+    public float minHeartbeatInterval = 0.9f;
+    public float maxHeartbeatInterval = 0.22f;
+    public float maxHeartbeatVolume = 0.6f;
+    public float minHeartbeatPitch = 0.94f;
+    public float maxHeartbeatPitch = 1.08f;
+
     [Header("Death")]
     public bool destroyOnDeath = true;
     public float destroyDelay = 0.15f;
+    public bool resetSceneOnDeath = true;
+    public float resetDelay = 0.3f;
+
+    [Header("Controls")]
+    public bool allowManualRestart = true;
+    public KeyCode restartKey = KeyCode.R;
 
     [Header("Debug")]
     public bool enableDebugLogs = true;
@@ -46,9 +65,11 @@ public class PlayerCorruption : MonoBehaviour
 
     private int blackContacts;
     private int whiteContacts;
+    private readonly List<CorruptionZone> overlappingZones = new List<CorruptionZone>();
     protected ActiveZone activeZone;
     protected float zoneTimer;
     private bool isDead;
+    private bool isSafeMode;
     protected float currentExposureProgress;
     protected float currentDangerProgress;
     protected float currentSafeWindowProgress;
@@ -61,6 +82,7 @@ public class PlayerCorruption : MonoBehaviour
     private Color baseColor;
     private Vector3 baseScale;
     private Vector3 auraBaseScale;
+    private float heartbeatTimer;
 
     public bool IsInCorruptingZone => activeZone != ActiveZone.None;
     public float ExposureProgress => currentExposureProgress;
@@ -68,6 +90,9 @@ public class PlayerCorruption : MonoBehaviour
     public float SafeWindowProgress => currentSafeWindowProgress;
     public bool IsBlackZoneActive => activeZone == ActiveZone.Black;
     public Color ActiveZoneColor => activeZone == ActiveZone.Black ? Color.black : Color.white;
+    public float ZoneTimer => zoneTimer;
+    public float SafeDuration => safeDuration;
+    public float DeathDuration => deathDuration;
     // Gray/neutral space is safe, and corruption zones are safe until danger starts.
     public bool IsStable => !IsInCorruptingZone || currentDangerProgress <= 0.0001f;
     public float LastCleanSwapTime => lastCleanSwapTime;
@@ -114,14 +139,29 @@ public class PlayerCorruption : MonoBehaviour
             auraBaseScale = auraRenderer.transform.localScale;
         }
 
+        EnsureHeartbeatSource();
+
         UpdateLeakParticles(0f, activeZone);
         UpdateAura(0f, activeZone);
     }
 
     protected virtual void Update()
     {
+        if (allowManualRestart && IsRestartPressed())
+        {
+            RestartSceneNow();
+            return;
+        }
+
         if (isDead)
         {
+            StopHeartbeat();
+            return;
+        }
+
+        if (isSafeMode)
+        {
+            StopHeartbeat();
             return;
         }
 
@@ -167,6 +207,7 @@ public class PlayerCorruption : MonoBehaviour
             currentSafeWindowProgress = 0f;
             hasBecomeUnsafe = false;
             ResetVisuals();
+            StopHeartbeat();
             return;
         }
 
@@ -195,6 +236,7 @@ public class PlayerCorruption : MonoBehaviour
         UpdateVisualFeedback(danger, activeZone);
         UpdateLeakParticles(anticipation, activeZone);
         UpdateAura(anticipation, activeZone);
+        UpdateHeartbeat(danger);
 
         if (zoneTimer >= zoneLimit)
         {
@@ -204,59 +246,133 @@ public class PlayerCorruption : MonoBehaviour
 
     void OnTriggerEnter2D(Collider2D other)
     {
-        CorruptionZone zone = other.GetComponent<CorruptionZone>();
+        CorruptionZone zone = ResolveZoneFromCollider(other);
         if (zone == null)
         {
             return;
         }
 
-        if (zone.zoneType == CorruptionZone.ZoneType.Black)
+        if (!overlappingZones.Contains(zone))
         {
-            blackContacts++;
-        }
-        else
-        {
-            whiteContacts++;
+            overlappingZones.Add(zone);
+            RecountZoneContacts();
         }
 
-        DebugLog("Trigger enter: " + zone.zoneType + ". Contacts -> black: " + blackContacts + ", white: " + whiteContacts +
+        DebugLog("Trigger enter: " + zone.zoneType + " on " + zone.name + ". Contacts -> black: " + blackContacts + ", white: " + whiteContacts +
             ", resolved zone: " + ResolveActiveZone() + ", timer: " + zoneTimer.ToString("F2"));
+    }
+
+    void OnTriggerStay2D(Collider2D other)
+    {
+        CorruptionZone zone = ResolveZoneFromCollider(other);
+        if (zone == null)
+        {
+            return;
+        }
+
+        if (!overlappingZones.Contains(zone))
+        {
+            overlappingZones.Add(zone);
+            RecountZoneContacts();
+            DebugLog("Trigger stay sync: added missing overlap for " + zone.zoneType + " on " + zone.name + ".");
+        }
     }
 
     void OnTriggerExit2D(Collider2D other)
     {
-        CorruptionZone zone = other.GetComponent<CorruptionZone>();
+        CorruptionZone zone = ResolveZoneFromCollider(other);
         if (zone == null)
         {
             return;
         }
 
-        if (zone.zoneType == CorruptionZone.ZoneType.Black)
+        if (overlappingZones.Remove(zone))
         {
-            blackContacts = Mathf.Max(0, blackContacts - 1);
-        }
-        else
-        {
-            whiteContacts = Mathf.Max(0, whiteContacts - 1);
+            RecountZoneContacts();
         }
 
-        DebugLog("Trigger exit: " + zone.zoneType + ". Contacts -> black: " + blackContacts + ", white: " + whiteContacts +
+        DebugLog("Trigger exit: " + zone.zoneType + " on " + zone.name + ". Contacts -> black: " + blackContacts + ", white: " + whiteContacts +
             ", resolved zone: " + ResolveActiveZone() + ", timer: " + zoneTimer.ToString("F2"));
+    }
+
+    private CorruptionZone ResolveZoneFromCollider(Collider2D other)
+    {
+        if (other == null)
+        {
+            return null;
+        }
+
+        CorruptionZone zone = other.GetComponent<CorruptionZone>();
+        if (zone != null)
+        {
+            return zone;
+        }
+
+        zone = other.GetComponentInParent<CorruptionZone>();
+        if (zone != null)
+        {
+            return zone;
+        }
+
+        return other.GetComponentInChildren<CorruptionZone>();
+    }
+
+    private void RecountZoneContacts()
+    {
+        blackContacts = 0;
+        whiteContacts = 0;
+
+        for (int index = overlappingZones.Count - 1; index >= 0; index--)
+        {
+            CorruptionZone zone = overlappingZones[index];
+            if (zone == null)
+            {
+                overlappingZones.RemoveAt(index);
+                continue;
+            }
+
+            if (zone.zoneType == CorruptionZone.ZoneType.Black)
+            {
+                blackContacts++;
+            }
+            else
+            {
+                whiteContacts++;
+            }
+        }
     }
 
     protected virtual ActiveZone ResolveActiveZone()
     {
-        if (blackContacts > 0 && whiteContacts == 0)
+        if (overlappingZones.Count == 0)
         {
-            return ActiveZone.Black;
+            return ActiveZone.None;
         }
 
-        if (whiteContacts > 0 && blackContacts == 0)
+        CorruptionZone bestZone = null;
+        for (int index = overlappingZones.Count - 1; index >= 0; index--)
         {
-            return ActiveZone.White;
+            CorruptionZone zone = overlappingZones[index];
+            if (zone == null)
+            {
+                overlappingZones.RemoveAt(index);
+                continue;
+            }
+
+            if (bestZone == null || zone.zonePriority > bestZone.zonePriority)
+            {
+                bestZone = zone;
+            }
         }
 
-        return ActiveZone.None;
+        if (bestZone == null)
+        {
+            return ActiveZone.None;
+        }
+
+        return bestZone.zoneType == CorruptionZone.ZoneType.Black
+            ? ActiveZone.Black
+            : ActiveZone.White;
     }
 
     private void ResetVisuals()
@@ -283,12 +399,14 @@ public class PlayerCorruption : MonoBehaviour
         {
             Color targetColor = zone == ActiveZone.Black ? Color.black : Color.white;
 
-            float flickerSpeed = Mathf.Lerp(minFlickerSpeed, maxFlickerSpeed, danger);
-            float pulseSpeed = Mathf.Lerp(minPulseSpeed, maxPulseSpeed, danger);
+            // Use a non-linear ramp so flicker begins slow, then accelerates near high danger.
+            float speedRamp = Mathf.Pow(Mathf.Clamp01(danger), 1.8f);
+            float flickerSpeed = Mathf.Lerp(minFlickerSpeed, maxFlickerSpeed, speedRamp);
+            float pulseSpeed = Mathf.Lerp(minPulseSpeed, maxPulseSpeed, speedRamp);
 
             float flicker = (Mathf.Sin(Time.time * flickerSpeed) + 1f) * 0.5f;
             // Ensure flicker is visible as soon as danger starts, then ramp to full intensity.
-            float blend = flicker * Mathf.Lerp(0.22f, 1f, danger);
+            float blend = flicker * Mathf.Lerp(0.12f, 1f, speedRamp);
             playerRenderer.color = Color.Lerp(baseColor, targetColor, blend);
 
             float pulse = Mathf.Sin(Time.time * pulseSpeed) * maxScalePulse * danger;
@@ -325,10 +443,69 @@ public class PlayerCorruption : MonoBehaviour
 
         UpdateLeakParticles(1f, activeZone == ActiveZone.None ? ActiveZone.Black : activeZone);
         UpdateAura(1f, activeZone == ActiveZone.None ? ActiveZone.Black : activeZone);
+        StopHeartbeat();
+
+        if (resetSceneOnDeath)
+        {
+            StartCoroutine(ResetSceneAfterDelay());
+            return;
+        }
 
         if (destroyOnDeath)
         {
             Destroy(gameObject, destroyDelay);
+        }
+    }
+
+    private IEnumerator ResetSceneAfterDelay()
+    {
+        yield return new WaitForSeconds(resetDelay);
+        RestartSceneNow();
+    }
+
+    private void RestartSceneNow()
+    {
+        Scene activeScene = SceneManager.GetActiveScene();
+        SceneManager.LoadScene(activeScene.buildIndex);
+    }
+
+    private bool IsRestartPressed()
+    {
+        Keyboard keyboard = Keyboard.current;
+        if (keyboard == null)
+        {
+            return false;
+        }
+
+        return restartKey switch
+        {
+            KeyCode.R => keyboard.rKey.wasPressedThisFrame,
+            KeyCode.Space => keyboard.spaceKey.wasPressedThisFrame,
+            KeyCode.Escape => keyboard.escapeKey.wasPressedThisFrame,
+            KeyCode.Return => keyboard.enterKey.wasPressedThisFrame,
+            KeyCode.KeypadEnter => keyboard.numpadEnterKey.wasPressedThisFrame,
+            _ => false
+        };
+    }
+
+    public void ResetCorruption()
+    {
+        DebugLog("Reset corruption on safe zone.");
+        zoneTimer = 0f;
+        currentExposureProgress = 0f;
+        currentDangerProgress = 0f;
+        currentSafeWindowProgress = 0f;
+        hasBecomeUnsafe = false;
+        StopHeartbeat();
+        ResetVisuals();
+    }
+
+    public void SetSafeMode(bool state)
+    {
+        isSafeMode = state;
+        if (isSafeMode)
+        {
+            ResetCorruption();
         }
     }
 
@@ -386,6 +563,61 @@ public class PlayerCorruption : MonoBehaviour
 
         particles.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
         return particles;
+    }
+
+    private void EnsureHeartbeatSource()
+    {
+        if (heartbeatSource != null)
+        {
+            heartbeatSource.playOnAwake = false;
+            heartbeatSource.loop = false;
+            heartbeatSource.spatialBlend = 0f;
+            return;
+        }
+
+        GameObject audioObject = new GameObject("HeartbeatAudio");
+        audioObject.transform.SetParent(transform, false);
+        heartbeatSource = audioObject.AddComponent<AudioSource>();
+        heartbeatSource.playOnAwake = false;
+        heartbeatSource.loop = false;
+        heartbeatSource.spatialBlend = 0f;
+    }
+
+    private void UpdateHeartbeat(float danger)
+    {
+        if (heartbeatSource == null || heartbeatClip == null)
+        {
+            return;
+        }
+
+        if (danger <= 0f)
+        {
+            StopHeartbeat();
+            return;
+        }
+
+        float speedRamp = Mathf.Pow(Mathf.Clamp01(danger), 1.8f);
+        float interval = Mathf.Lerp(minHeartbeatInterval, maxHeartbeatInterval, speedRamp);
+
+        heartbeatTimer -= Time.deltaTime;
+        if (heartbeatTimer > 0f)
+        {
+            return;
+        }
+
+        heartbeatSource.pitch = Mathf.Lerp(minHeartbeatPitch, maxHeartbeatPitch, speedRamp);
+        float volume = Mathf.Lerp(0.2f, maxHeartbeatVolume, danger);
+        heartbeatSource.PlayOneShot(heartbeatClip, volume);
+        heartbeatTimer = interval;
+    }
+
+    private void StopHeartbeat()
+    {
+        heartbeatTimer = 0f;
+        if (heartbeatSource != null && heartbeatSource.isPlaying)
+        {
+            heartbeatSource.Stop();
+        }
     }
 
     private SpriteRenderer CreateAuraRenderer()

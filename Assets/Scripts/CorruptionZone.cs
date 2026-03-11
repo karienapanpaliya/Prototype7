@@ -9,4 +9,5 @@ public class CorruptionZone : MonoBehaviour
     }
 
     public ZoneType zoneType = ZoneType.Black;
+    public int zonePriority = 0;
 }

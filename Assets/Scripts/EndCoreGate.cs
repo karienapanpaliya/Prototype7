@@ -135,6 +135,17 @@ public class EndCoreGate : MonoBehaviour
             return;
         }
 
+        PlayerMove playerMove = other.GetComponent<PlayerMove>();
+        if (playerMove == null)
+        {
+            playerMove = other.GetComponentInParent<PlayerMove>();
+        }
+
+        if (playerMove != null)
+        {
+            playerMove.SetPaused(true);
+        }
+
         PlayerCorruption corruption = other.GetComponent<PlayerCorruption>();
         if (corruption == null)
         {
