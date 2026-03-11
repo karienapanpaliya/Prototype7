@@ -46,16 +46,16 @@ public class PlayerCorruption : MonoBehaviour
 
     private int blackContacts;
     private int whiteContacts;
-    private ActiveZone activeZone;
-    private float zoneTimer;
+    protected ActiveZone activeZone;
+    protected float zoneTimer;
     private bool isDead;
-    private float currentExposureProgress;
-    private float currentDangerProgress;
-    private float currentSafeWindowProgress;
-    private bool hasBecomeUnsafe;
-    private ActiveZone lastCommittedZone;
-    private float lastCleanSwapTime = -999f;
-    private Vector2 lastCleanSwapPosition;
+    protected float currentExposureProgress;
+    protected float currentDangerProgress;
+    protected float currentSafeWindowProgress;
+    protected bool hasBecomeUnsafe;
+    protected ActiveZone lastCommittedZone;
+    protected float lastCleanSwapTime = -999f;
+    protected Vector2 lastCleanSwapPosition;
 
     private PlayerMove playerMove;
     private Color baseColor;
@@ -118,7 +118,7 @@ public class PlayerCorruption : MonoBehaviour
         UpdateAura(0f, activeZone);
     }
 
-    void Update()
+    protected virtual void Update()
     {
         if (isDead)
         {

@@ -30,4 +30,44 @@ public class PlayerCorruptionSwirl : PlayerCorruption
         // If brightness is high, it's White. Otherwise, it's Black.
         return brightness > 0.5f ? ActiveZone.White : ActiveZone.Black;
     }
+    
+    private ActiveZone previousFrameZone;
+
+protected override void Update()
+{
+    ActiveZone currentPixelZone = ResolveActiveZone();
+
+    // If the pixel color changed since the last frame
+    if (currentPixelZone != previousFrameZone && currentPixelZone != ActiveZone.None)
+    {
+        // If we were already in a zone (meaning this is a SWAP, not just starting)
+        if (previousFrameZone != ActiveZone.None) 
+        {
+            // 1. Reset the timers
+            zoneTimer = 0f; 
+            hasBecomeUnsafe = false;
+            
+            // 2. Reset the "Progress" bars that control flickering/zooming
+            currentExposureProgress = 0f;
+            currentDangerProgress = 0f;
+            currentSafeWindowProgress = 0f; // Reset the safe window too!
+
+            // 3. Update the Gate positions
+            lastCleanSwapTime = Time.time;
+            lastCleanSwapPosition = transform.position;
+
+            // 4. Update the actual zone variables
+            activeZone = currentPixelZone;
+            lastCommittedZone = currentPixelZone;
+
+            Debug.Log($"<color=cyan>Resetting everything!</color> Swapped to: {currentPixelZone}");
+        }
+    }
+
+    previousFrameZone = currentPixelZone;
+
+    // Run the parent logic AFTER we've reset the timers
+    base.Update();
+}
+
 }
